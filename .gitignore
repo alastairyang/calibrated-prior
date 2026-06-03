@@ -2,3 +2,5 @@
 *.tif
 *.nc
 *.pptx
+*.DS_Store
+/data/
