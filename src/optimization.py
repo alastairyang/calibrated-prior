@@ -133,3 +133,10 @@ def log_prior_hessian(Eb, gmm):
     weighted_hess -= np.outer(mean_grad, mean_grad)         
 
     return weighted_hess
+
+def log_posterior_gradient():
+    print("I am here")
+    return
+
+def log_posterior():
+    pass

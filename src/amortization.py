@@ -333,6 +333,70 @@ def pushforward(md, mean, covariance, mean_p, covariance_p, i_in, i_out):
     return MVN(mean=mean_target, covariance=covariance_target,
                random_state=md.random_state)
 
+def conjugate_bayes_update(md, A, mean, covariance, mean_p, covariance_p):
+    """    
+    Conjugate Bayesian update of a Gaussian prior with a Gaussian likelihood:
+    i.e.: 
+    p(x|z) p(z) ~ N(x|Az, cov_obs) * N(z|mu, cov)
+    where p(z) is the prior and p(x|z) is the likelihood; x is observation
+    A is a linear operator mapping from the latent space to the obs. space. 
+    The posterior is also Gaussian and can be computed analytically.
+
+    here 'mean' -> mean of the likelihood (in latent space), 
+                   or 'z' in the notation above
+         'A' -> linear operator mapping from latent space to obs. space
+         'covariance' -> covariance of the likelihood (in obs. space)
+                   or 'cov_obs' in the notation above
+         'mean_p' -> mean of the prior (in latent space)
+                   or 'mu' in the notation above
+         'covariance_p' -> covariance of the prior (in latent space)
+                   or 'cov' in the notation above
+
+    p(z|x) ~ N(z|mu_post, cov_post)
+    where: 
+        mu_post  = cov_post(A.T @ cov_obs.inv @ x + cov.inv @ mu)
+        cov_post = (cov.inv + A.T @ cov_obs.inv @ A).inv
+
+    Parameters
+    ----------
+    md : GMM or MVN model object
+        This is to get the random state seed to ensure consistency.
+
+    mean : array, shape (n_features,)
+        Mean of MVN
+
+    covariance : array, shape (n_features, n_features)
+        Covariance of MVN
+
+    mean_p: array, shape (n_features,)
+        Mean of the MVN to be updated
+    
+    covariance_p: array, shape (n_features, n_features)
+        Covariance of the MVN to be updated
+
+    i_out : array, shape (n_features,)
+        Output feature indices
+
+    i_in : array, shape (n_features,)
+        Input feature indices
+
+    Returns
+    -------
+    MVN model object
+    """
+    cov_inv = pinvh(covariance)
+    cov_p_inv = pinvh(covariance_p)
+
+    cov_post_inv = cov_p_inv + A.T @ cov_inv @ A
+    cov_post = pinvh(cov_post_inv)
+
+    mean_post = cov_post @ (A.T @ cov_inv @ mean + cov_p_inv @ mean_p)
+    
+    return MVN(mean=mean_post, covariance=cov_post,
+               random_state=md.random_state)
+
+    
+
 def propagate_uncertainty(mean_p, covariance_p, gmr_md, indices, X):
     """  
     Propagate the observational uncertainty P(y_obs) through the learned distribution of P(x|y) marginalized from P(x,y)
@@ -396,6 +460,7 @@ def propagate_uncertainty(mean_p, covariance_p, gmr_md, indices, X):
     
     return GMM(n_components=gmr_md.n_components, priors=priors, means=means,
                 covariances=covariances, random_state=gmr_md.random_state)
+
 
 def to_log_probability_density(gmm, X):
     """
