@@ -333,20 +333,20 @@ def pushforward(md, mean, covariance, mean_p, covariance_p, i_in, i_out):
     return MVN(mean=mean_target, covariance=covariance_target,
                random_state=md.random_state)
 
-def conjugate_bayes_update(md, A, mean, covariance, mean_p, covariance_p):
+def conjugate_bayes_update(md, A, x, sigma_obs_element, mean_p, covariance_p, identity_obs_cov=True):
     """    
     Conjugate Bayesian update of a Gaussian prior with a Gaussian likelihood:
     i.e.: 
-    p(x|z) p(z) ~ N(x|Az, cov_obs) * N(z|mu, cov)
+    p(x|z) p(z) ~ N(x|A mu, cov_obs) * N(z|mu, cov)
     where p(z) is the prior and p(x|z) is the likelihood; x is observation
     A is a linear operator mapping from the latent space to the obs. space. 
     The posterior is also Gaussian and can be computed analytically.
 
-    here 'mean' -> mean of the likelihood (in latent space), 
-                   or 'z' in the notation above
+    here:
          'A' -> linear operator mapping from latent space to obs. space
-         'covariance' -> covariance of the likelihood (in obs. space)
-                   or 'cov_obs' in the notation above
+         'x' -> the observed data in the original space
+         'sigma_obs_element' -> scalar element of the observation covariance
+                   (assumed to be identity * scalar)
          'mean_p' -> mean of the prior (in latent space)
                    or 'mu' in the notation above
          'covariance_p' -> covariance of the prior (in latent space)
@@ -361,9 +361,6 @@ def conjugate_bayes_update(md, A, mean, covariance, mean_p, covariance_p):
     ----------
     md : GMM or MVN model object
         This is to get the random state seed to ensure consistency.
-
-    mean : array, shape (n_features,)
-        Mean of MVN
 
     covariance : array, shape (n_features, n_features)
         Covariance of MVN
@@ -384,16 +381,25 @@ def conjugate_bayes_update(md, A, mean, covariance, mean_p, covariance_p):
     -------
     MVN model object
     """
-    cov_inv = pinvh(covariance)
-    cov_p_inv = pinvh(covariance_p)
+    # # print all input dimensions for debugging
+    # print("shape of A:", A.shape)
+    # print("shape of x:", x.shape)
+    # print("shape of mean_p:", mean_p.shape)
+    # print("shape of covariance_p:", covariance_p.shape)
+    if not identity_obs_cov:
+        # not implemented
+        raise NotImplementedError("Non-identity observation covariance not implemented yet.")
+    else:
+        # math below only works in the case that obs cov is identity * scalar. 
+        cov_p_inv = pinvh(covariance_p) # Inverse of the prior covariance
 
-    cov_post_inv = cov_p_inv + A.T @ cov_inv @ A
-    cov_post = pinvh(cov_post_inv)
-
-    mean_post = cov_post @ (A.T @ cov_inv @ mean + cov_p_inv @ mean_p)
+        cov_post_inv = cov_p_inv + A.T @ A * 1/sigma_obs_element  
+        cov_post = pinvh(cov_post_inv)
     
-    return MVN(mean=mean_post, covariance=cov_post,
-               random_state=md.random_state)
+        mean_post = cov_post @ (A.T @ x * 1/sigma_obs_element + cov_p_inv @ mean_p)
+        
+        return MVN(mean=mean_post, covariance=cov_post,
+                random_state=md.random_state)
 
     
 

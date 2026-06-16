@@ -763,10 +763,10 @@ class model:
             plt.show()
         return z_optimal, residual_latent, residual_recon, residual
 
-    def compute_posterior(self, gmm_md, covariance_p):
+    def compute_posterior(self, gmm_md, A, obs, sigma_obs_element):
         """
-        Compute the posterior distributionof PCA-GMM. 
-        Analytical update on the mean and covariance in the latent space
+        Compute the posterior distribution of PCA-GMM. 
+        Analytical update on the mean and covariance in the latent space.
         
         Parameters
         ----------
@@ -774,35 +774,71 @@ class model:
             The observed data in the original space.
         gmm_md: GMM
             The trained Gaussian Mixture Model on the data. 
+        A: ndarray of shape (n_observations, n_latent_y)
+            The linear operator that maps the latent space to the observation space.
+        sigma_obs_element: float
+            The observational uncertainty for each element in the observation space, 
+            assumed to be isotropic (sigma_obs_element * identity matrix).
         """
+        from src.amortization import conjugate_bayes_update
+        from gmr import MVN
+
         n_gaussian = gmm_md.n_components
         n_features = gmm_md.means.shape[1]
         means = np.empty((n_gaussian, n_features))
         covariances = np.empty((n_gaussian, n_features, n_features))
+        marginal_log_liks = np.empty(n_gaussian)
 
-        marginal_norm_factors = np.empty(n_gaussian)
-        marginal_prior_exponents = np.empty(n_gaussian)
+        obs_flat = obs.ravel()  # ensure (n_obs,) for dot products
 
         # iterate through each Gaussian component
         for k in range(n_gaussian):
             mvn = MVN(mean=gmm_md.means[k], covariance=gmm_md.covariances[k],
-                        random_state=gmm_md.random_state)
-            # ---
-            pushed = pushforward(mvn, mvn.mean, mvn.covariance, mean_p, covariance_p,
-                                y_indices, x_indices)
-            means[k] = pushed.mean
-            covariances[k] = pushed.covariance
+                    random_state=gmm_md.random_state)
+            single_posterior = conjugate_bayes_update(mvn,
+                                                    A,
+                                                    obs_flat,
+                                                    sigma_obs_element,
+                                                    mvn.mean,
+                                                    mvn.covariance,
+                                                    identity_obs_cov=True)
+            means[k] = single_posterior.mean
+            covariances[k] = single_posterior.covariance
 
-            marginal_norm_factors[k], exponents = \
-                mvn.marginalize(y_indices).to_norm_factor_and_exponents(mean_p.reshape(1, -1))
-            marginal_prior_exponents[k] = exponents[0]
+            #  Marginal log-likelihood via posterior normalization constant trick 
+            # p(obs | k) = p(obs | mu_post) * p(mu_post | k) / p(mu_post | obs, k)
+            # All operations in latent space — no large matrix formed.
 
-        priors = _safe_probability_density(
-            gmm_md.priors * marginal_norm_factors,
-            marginal_prior_exponents[np.newaxis])[0]
-        
+            # 1. Log-likelihood: p(obs | mu_post), isotropic so just a dot product
+            residual = obs_flat - A @ single_posterior.mean          # (n_obs,)
+            n_obs = float(np.sum(self.flight_mask))
+            log_likelihood = (
+                -0.5 * np.dot(residual, residual) / sigma_obs_element
+                - 0.5 * n_obs * np.log(2.0 * np.pi * sigma_obs_element)
+            )
+
+            # Log-prior: p(mu_post | k) — prior MVN evaluated at posterior mean
+            norm_prior, exp_prior = mvn.to_norm_factor_and_exponents(
+                single_posterior.mean.reshape(1, -1))        
+            log_prior = np.log(norm_prior) + exp_prior[0]
+
+            # Log-posterior: p(mu_post | obs, k) — posterior MVN at its own mean
+            #    exponent is always 0.0 (evaluating at the mean), so only norm matters
+            norm_post, _ = single_posterior.to_norm_factor_and_exponents(
+                single_posterior.mean.reshape(1, -1))             
+            log_post = np.log(norm_post)
+
+            marginal_log_liks[k] = log_likelihood + log_prior - log_post
+
+        # Reweight in log-space for numerical stability
+        log_weights = np.log(gmm_md.priors + 1e-300) + marginal_log_liks
+        log_weights -= log_weights.max()   # subtract max before exp to avoid overflow
+        priors = np.exp(log_weights)
+        priors /= priors.sum()             # normalize to valid probability vector
+
         return GMM(n_components=gmm_md.n_components, priors=priors, means=means,
-                    covariances=covariances, random_state=gmm_md.random_state)
+                covariances=covariances, random_state=gmm_md.random_state)
+
     def plot_gmm_samples_pca(self, n_samples=3):
         """   
         Visualize GMM predictions from random test samples. Default to 3 samples. 
