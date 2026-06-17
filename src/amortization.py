@@ -59,6 +59,10 @@ def build_spatial_covariance_operator(H, x, y, mask, length_scale=200e3, cutoff_
     Constructs a LinearOperator representing the spatial covariance matrix.
     
     Returns:
+        H: 1D array of ice thickness
+        x: 1D array of x coordinates
+        y: 1D array of y coordinates
+        mask: 1D boolean array indicating valid observation points
         Sigma_op: LinearOperator (n, n)
         n: integer, dimension of the problem
     """
