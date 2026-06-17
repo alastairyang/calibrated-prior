@@ -230,11 +230,6 @@ def temperature_to_conductivity(
 
     return sigma_ice + sigma_Hp + sigma_ssCl
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Helper 2: Conductivity → Attenuation Rate
-# ──────────────────────────────────────────────────────────────────────────────
-
 def conductivity_to_atten_rate(sigma):
     """
     Calculate one-way attenuation rate from conductivity.
@@ -262,11 +257,6 @@ def conductivity_to_atten_rate(sigma):
     N = 1000 * (10 * np.log10(np.exp(1))) * sigma / (c * eps0 * np.sqrt(epsr))
 
     return N
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Combined: Temperature → Attenuation Rate (with chemistry mix)
-# ──────────────────────────────────────────────────────────────────────────────
 
 def temperature_to_atten_rate_mix(
     T,
@@ -327,6 +317,136 @@ def temperature_to_atten_rate_mix(
     )
 
     return conductivity_to_atten_rate(sigma)
+
+from scipy.optimize import brentq, minimize_scalar
+import numpy as np
+
+
+def atten_rate_to_temperature_mix(
+    N,
+    T_bounds=(200.0, 273.15),
+    sigma0=6.6e-6,
+    Epure=None,
+    E_Hp=None,
+    E_ssCl=None,
+    mu_Hp=3.2,
+    mu_ssCl=0.43,
+    molar_ssCl=4.2e-6,
+    molar_Hp=2.7e-6,
+):
+    """
+    Invert attenuation rate back to temperature using a bounded root-finding
+    approach (Brent's method), with a fallback to minimization if the target
+    lies outside the monotonic range of the forward model.
+
+    The forward model  N(T) = conductivity_to_atten_rate(temperature_to_conductivity(T))
+    is strictly monotonically increasing in T, so a unique inverse exists
+    within any physically valid temperature range.
+
+    Parameters
+    ----------
+    N : float or array-like
+        One-way attenuation rate (dB/km).
+    T_bounds : tuple of float, optional
+        (T_min, T_max) search bracket in Kelvin. Default: (200.0, 273.15).
+    sigma0 : float, optional
+        Pure-ice conductivity pre-factor (S/m). Default: 6.6e-6.
+    Epure : float, optional
+        Activation energy for pure ice (J). Default: 0.55 eV.
+    E_Hp : float, optional
+        Activation energy for H+ ions (J). Default: 0.20 eV.
+    E_ssCl : float, optional
+        Activation energy for ss-Cl ions (J). Default: 0.19 eV.
+    mu_Hp : float, optional
+        Molar conductivity for H+ (S/m per mol/L). Default: 3.2.
+    mu_ssCl : float, optional
+        Molar conductivity for ss-Cl (S/m per mol/L). Default: 0.43.
+    molar_ssCl : float, optional
+        Molar concentration of ss-Cl (mol). Default: 4.2e-6.
+    molar_Hp : float, optional
+        Molar concentration of H+ (mol). Default: 2.7e-6.
+
+    Returns
+    -------
+    T : np.ndarray
+        Recovered temperature in Kelvin. Values that fall outside T_bounds
+        are returned as np.nan with a warning.
+
+    References
+    ----------
+    MacGregor et al. (2007), Table 1 & 2.
+    """
+    N = np.atleast_1d(np.asarray(N, dtype=float))
+
+    # Package all chemistry kwargs for clean forwarding
+    chemistry = dict(
+        sigma0=sigma0,
+        Epure=Epure,
+        E_Hp=E_Hp,
+        E_ssCl=E_ssCl,
+        mu_Hp=mu_Hp,
+        mu_ssCl=mu_ssCl,
+        molar_ssCl=molar_ssCl,
+        molar_Hp=molar_Hp,
+    )
+
+    T_min, T_max = T_bounds
+
+    # Pre-compute forward model at bracket edges to check range
+    N_min = temperature_to_atten_rate_mix(T_min, **chemistry)
+    N_max = temperature_to_atten_rate_mix(T_max, **chemistry)
+
+    def _forward_residual(T_scalar, N_target):
+        """Residual: N(T) - N_target = 0 at the solution."""
+        return temperature_to_atten_rate_mix(T_scalar, **chemistry) - N_target
+
+    def _solve_single(N_target):
+        """Solve for a single scalar attenuation rate value."""
+
+        # Check if target is within the forward model's range
+        if N_target < N_min:
+            print(
+                f"Warning: N={N_target:.4f} dB/km is below the minimum "
+                f"N({T_min} K)={N_min:.4f} dB/km. Returning NaN."
+            )
+            return np.nan
+
+        if N_target > N_max:
+            print(
+                f"Warning: N={N_target:.4f} dB/km exceeds the maximum "
+                f"N({T_max} K)={N_max:.4f} dB/km. Returning NaN."
+            )
+            return np.nan
+
+        # Brent's method: fast, robust, guaranteed convergence on a bracket
+        try:
+            T_solution = brentq(
+                _forward_residual,
+                T_min,
+                T_max,
+                args=(N_target,),
+                xtol=1e-6,   # tolerance in K
+                maxiter=200,
+            )
+            return T_solution
+
+        except ValueError:
+            # Fallback: if brentq bracket fails for any reason, use minimization
+            result = minimize_scalar(
+                lambda T: _forward_residual(T, N_target) ** 2,
+                bounds=(T_min, T_max),
+                method="bounded",
+            )
+            if result.success:
+                return result.x
+            else:
+                print(f"Warning: optimization failed for N={N_target:.4f}. Returning NaN.")
+                return np.nan
+
+    # Vectorize over input array
+    T_out = np.array([_solve_single(n) for n in N.ravel()])
+
+    return T_out.reshape(N.shape)
 
 
 def temperature_to_rigidity(temperature):
