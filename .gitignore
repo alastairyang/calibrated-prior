@@ -6,4 +6,5 @@
 *.pyc
 *.pt
 *.pth
+*.npz
 /data/
