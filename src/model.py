@@ -118,6 +118,7 @@ class model:
         self.ndim_ori = self.nx * self.ny * self.n_channel
         self.n_channel = X.shape[2]
         self.n_samples_total = X.shape[3]
+        colormap = 'RdBu'
 
         if show_plot:
             random_indices = np.random.choice(self.n_samples_total, size=5, replace=False)
@@ -128,7 +129,7 @@ class model:
                 X_plot = X[:, :, :, idx].copy()
                 if domain_mask is not None:
                     X_plot[domain_mask == False] = np.nan # set the values outside the model boundary to NaN for better visualization
-                plt.imshow(X_plot, cmap='viridis', vmin = -2, vmax = 2)
+                plt.imshow(X_plot, cmap=colormap, vmin = -2, vmax = 2)
                 plt.gca().invert_yaxis()
                 plt.gca().axis('off')
                 plt.title(f'X Sample {idx}')
@@ -139,7 +140,7 @@ class model:
                 if domain_mask is not None:
                     Y_plot[domain_mask == False] = np.nan
                 
-                plt.imshow(Y_plot, cmap='viridis', vmin=-2, vmax=2)
+                plt.imshow(Y_plot, cmap=colormap, vmin=-2, vmax=2)
                 plt.gca().invert_yaxis()
                 plt.gca().axis('off')
                 plt.title(f'Y Sample {idx}')

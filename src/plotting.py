@@ -11,9 +11,13 @@ import xarray as xr
 from scipy.interpolate import RegularGridInterpolator
 
 class Plotting:
-    def __init__(self):
-        self.epsg     = 3031 # antarctic polar stereographic
-        self.proj     = ccrs.SouthPolarStereo()
+    def __init__(self, region='Antarctica'):
+        if region == 'Antarctica':
+            self.epsg     = 3031 # antarctic polar stereographic
+            self.proj     = ccrs.SouthPolarStereo()
+        if region == 'Greenland':
+            self.epsg     = 3413 # greenland polar stereographic
+            self.proj     = ccrs.NorthPolarStereo()
         self.data_crs = ccrs.epsg(self.epsg)
         pass
 
@@ -27,10 +31,13 @@ class Plotting:
     def define_extent(self, x, y):
         self.x_min, self.x_max = np.min(x), np.max(x)
         self.y_min, self.y_max = np.min(y), np.max(y)
+        if x.ndim == 2:
+            x = x.ravel()
+        if y.ndim == 2:
+            y = y.ravel()
         self.x = x
         self.y = y
-        return 
-    
+
     def make_consistent(self, data_dict):
         """
         Check coordinate. If not consistent, interpolate
@@ -49,7 +56,7 @@ class Plotting:
             data_dict['y'] = self.y
         return data_dict
 
-    def plot(self, data, background):
+    def plot(self, data, background, layout=None):
         """ 
         Create (multipanel) plot
         
@@ -57,6 +64,8 @@ class Plotting:
             data to be plotted. Tuple to accommodate multiple subplots
         background: dict
             background data (e.g., hillshade) to be plotted in all subplots
+        layout: tuple (nrows, ncols), optional
+            subplot grid shape. Defaults to (1, n_panels) if not specified.
             
         both data and background are composed of dict with keys 
             'x', 'y', 'data', 
@@ -64,57 +73,83 @@ class Plotting:
             'contour_data','contour_levels','contour_colors',
             'title','cb_label'
             if one of the option is not needed, it should be None
-
-
-        As of June 7, 2026, we only plot 1 row 
         """
 
         n_panels = len(data)
 
+        # ── resolve layout ────────────────────────────────────────────
+        if layout is None:
+            nrows, ncols = 1, n_panels
+        else:
+            nrows, ncols = layout
+            assert nrows * ncols >= n_panels, (
+                f"layout {layout} has only {nrows*ncols} cells but {n_panels} panels were provided."
+            )
 
-        fig, axes = plt.subplots(1, n_panels,
-            figsize=(5 * n_panels, 6),                      
+        fig, axes = plt.subplots(
+            nrows, ncols,
+            figsize=(5 * ncols, 6 * nrows),
             subplot_kw={'projection': self.proj}
         )
 
-        # if one figure, make axes iterable
-        if n_panels == 1:
-            axes = [axes]
+        # flatten axes to a 1-D list regardless of layout shape
+        axes_flat = np.array(axes).flatten().tolist()
 
-        for ax, d in zip(axes, data):
-            # first ensure input data are defined on the same coordinate system. 
+        for ax, d in zip(axes_flat, data):
+            # first ensure input data are defined on the same coordinate system
             d = self.make_consistent(d)
 
             self._setup_ax(ax, background)
             im0 = ax.imshow(
                 d['data'],
-                origin='lower',
                 extent=[self.x_min, self.x_max, self.y_min, self.y_max],
                 transform=self.data_crs,
-                cmap=d.get('cmap', 'viridis'),                         
+                cmap=d.get('cmap', 'viridis'),
                 alpha=1, zorder=1,
-                vmin=d.get('vmin'), vmax=d.get('vmax')
+                vmin=d.get('vmin'), vmax=d.get('vmax'),
+                origin='lower'
             )
             ax.set_title(d.get('title'))
             ax.set_aspect('equal')
+
             # add colorbar
-            fig.colorbar(im0, ax=ax, fraction=0.046, pad=0.04,
+            cb = fig.colorbar(im0, ax=ax, fraction=0.046, pad=0.04,
                         label=d.get('cb_label', ''))
-            # add dT contour
+            # make color bar label fontsize bigger
+            cb.set_label(d.get('cb_label', ''), fontsize=14)
+            cb.ax.tick_params(labelsize=12)
+
+            # add contour
             if d.get('contour_data') is not None:
                 x, y = np.meshgrid(d['x'], d['y'])
-                cs1 = ax.contour(
+                ax.contour(
                     x, y, d['contour_data'],
                     levels=d.get('contour_levels'),
                     colors=d.get('contour_colors', 'white'),
                     linewidths=1,
                     transform=self.data_crs,
-                    zorder=2
+                    zorder=2,
+                    origin='lower'
                 )
-        # tight layout
+
+            # add boundary
+            if d.get('boundary_data') is not None:
+                bx, by = d['boundary_data']
+                y_center = (self.y_min + self.y_max) / 2
+                by_fixed = 2 * y_center - by
+                ax.plot(
+                    bx, by_fixed,
+                    color='black', linewidth=0.8,
+                    transform=self.data_crs, zorder=4,
+                )
+
+        # hide any unused axes (e.g. 2x3 layout with 5 panels)
+        for ax in axes_flat[n_panels:]:
+            ax.set_visible(False)
+
         plt.tight_layout()
-        
-        return 
+        return
+
     def _setup_ax(self, ax, background):
 
         ax.set_extent([self.x_min, self.x_max, self.y_min, self.y_max], crs=self.data_crs)
@@ -137,7 +172,7 @@ class Plotting:
         # Hillshade (shared background)
         ax.imshow(
             background['data'],
-            origin='upper',
+            origin='lower',
             extent=[self.x_min, self.x_max, self.y_min, self.y_max],
             transform=self.data_crs,
             cmap=background.get('cmap', 'gist_earth'), alpha=0.6, zorder=0
