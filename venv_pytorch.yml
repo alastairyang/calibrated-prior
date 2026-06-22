@@ -1,0 +1,13 @@
+name: venv_pytorch
+channels:
+  - defaults
+dependencies:
+  - python=3.14.4
+  - ipykernel
+  - matplotlib
+  - pip
+  - scikit-learn
+  - tqdm
+  - sympy
+  - pytorch
+prefix: /Users/leo/miniconda3/envs/venv_pytorch
