@@ -130,7 +130,7 @@ def strain_heating(alpha, H, z, n=3, T=250):
     A = computeGlenFlowRateParameter(T)
     return 2 *A * (rho_i * g * (H-z) * alpha)**(n+1)
 
-def temperature_to_attenu_rate_ice(T):
+def temperature_to_atten_rate_ice(T):
     """
     compute attenuation rate from depth-avg temperature (kelvin)
     assuming pure ice
@@ -144,11 +144,11 @@ def temperature_to_attenu_rate_ice(T):
     epsr = 3.17 # real relative permittivity
 
     sigma = sigma0 * np.exp(-(E0/k)*(1/T - 1/Tr))
-    attenu_rate = sigma / (c * eps0 * np.sqrt(epsr) / (1000*(10*np.log(np.exp(1)))))
+    atten_rate = sigma / (c * eps0 * np.sqrt(epsr) / (1000*(10*np.log(np.exp(1)))))
 
-    return attenu_rate
+    return atten_rate
 
-def attenu_rate_to_temperature_ice(Na):
+def atten_rate_to_temperature_ice(Na):
     """
     compute temperature from attenuation rate (Np/m)
     assuming pure ice

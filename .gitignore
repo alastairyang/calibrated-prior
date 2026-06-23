@@ -7,4 +7,5 @@
 *.pt
 *.pth
 *.npz
+*.pkl
 /data/
