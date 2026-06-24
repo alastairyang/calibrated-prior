@@ -5,10 +5,12 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "flow-matching>=1.0.10",
     "gmr>=2.0.3",
     "ipympl>=0.10.0",
     "ipywidgets>=8.1.8",
     "matplotlib>=3.10.9",
+    "normflows>=1.7.3",
     "numpy>=2.4.6",
     "pandas>=3.0.3",
     "pyro-ppl>=1.9.1",

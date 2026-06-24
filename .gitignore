@@ -8,4 +8,5 @@
 *.pth
 *.npz
 *.pkl
+*.yml
 /data/
