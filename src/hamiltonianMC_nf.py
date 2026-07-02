@@ -5,31 +5,37 @@ class custom_energy(torch.autograd.Function):
     """
     Bridges the pure PyTorch/NumPy hybrid log-posterior directly into Pyro.
     """
-    @staticmethod
-    def forward(ctx, x, model_nf):
+
+    def __init__(self, model_nf, model_pca):
+        self.model_nf = model_nf
+        self.model_pca = model_pca
+ 
+    def forward(self, ctx, x):
         # x in target distribution space
 
         print('forward')
         ctx.save_for_backward(x)
-        ctx.model_nf = model_nf
         
         with torch.no_grad():
-            lp = model_nf.log_prob(x)
+            lp = self.model_nf.log_prob(x)
             if isinstance(lp, torch.Tensor):
                 lp = lp.item()
                 
         return torch.tensor(-lp, dtype=x.dtype, device=x.device)
 
-    @staticmethod
-    def backward(ctx, grad_output):
+    def backward(self, ctx, grad_output):
 
         print('backward')
         x, = ctx.saved_tensors
         x_np = x.detach().cpu().numpy()
+
+        # log_likelihood = 
+
+        log_posterior = self.model_nf.log_prob(x) # +
         
         # CRITICAL FIX: Re-enable gradient tracking so the internal AD graph can build!
         with torch.enable_grad():
-            grad_tensor = - torch.autograd.grad(model_nf.log_prob(x), x, retain_graph= True)
+            grad_tensor = torch.autograd.grad(self.model_nf.log_prob(x), x, retain_graph= True)
         
         grad_potential = grad_tensor.detach().numpy()
         

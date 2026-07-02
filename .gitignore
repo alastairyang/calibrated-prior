@@ -10,3 +10,4 @@
 *.pkl
 *.yml
 /data/
+/testing/normflows_examples/datasets
