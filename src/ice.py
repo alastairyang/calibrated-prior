@@ -144,11 +144,11 @@ def temperature_to_atten_rate_ice(T):
     epsr = 3.17 # real relative permittivity
 
     sigma = sigma0 * np.exp(-(E0/k)*(1/T - 1/Tr))
-    atten_rate = sigma / (c * eps0 * np.sqrt(epsr) / (1000*(10*np.log(np.exp(1)))))
+    atten_rate = sigma * ((1000*(10*np.log10(np.exp(1)))) / (c * eps0 * np.sqrt(epsr)))
 
     return atten_rate
 
-def atten_rate_to_temperature_ice(Na):
+def atten_rate_to_temperature_ice(atten_rate):
     """
     compute temperature from attenuation rate (Np/m)
     assuming pure ice
@@ -161,7 +161,7 @@ def atten_rate_to_temperature_ice(Na):
     eps0 = 8.854e-12 # permittivity in free space
     epsr = 3.17 # real relative permittivity
 
-    sigma = Na * (c * eps0 * np.sqrt(epsr) / (1000*(10*np.log(np.exp(1)))))
+    sigma = atten_rate * ((c * eps0 * np.sqrt(epsr)) / (1000*(10*np.log10(np.exp(1)))))
     T = 1 / ((-k/E0)*np.log(sigma/sigma0) + 1/Tr)
 
     return T
