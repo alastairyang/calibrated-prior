@@ -16,6 +16,7 @@ dependencies = [
     "pyro-ppl>=1.9.1",
     "scikit-learn>=1.8.0",
     "scipy>=1.17.1",
+    "shapely>=2.1.2",
     "torch>=2.12.0",
     "xarray>=2026.4.0",
 ]

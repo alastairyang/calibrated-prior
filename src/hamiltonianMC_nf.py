@@ -21,8 +21,8 @@ class custom_potential:
         #print(gaussian_z_image.log_prob(self.attenu_obs)[0][0])
 
         mean_se = - torch.mean((self.attenu_obs.detach().clone() - z_image) ** 2)
-
-        mean_se = mean_se * 5000
+        #print(f"prior log prob: {log_p_prior[0]}, log likelihood: {mean_se}")
+        #mean_se = mean_se
         #print(mean_se)
         #print(log_p_prior)
 
