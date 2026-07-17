@@ -172,10 +172,13 @@ def temperature_to_conductivity(
     Epure=None,
     E_Hp=None,
     E_ssCl=None,
-    mu_Hp=3.2,
-    mu_ssCl=0.43,
+    E_NH4p=None,
+    mu_Hp=None,
+    mu_ssCl=None,
+    mu_NH4p=None,
     molar_ssCl=4.2e-6,
     molar_Hp=2.7e-6,
+    molar_NH4p=None
 ):
     """
     Calculate ice conductivity from temperature assuming an Arrhenius relationship.
@@ -192,14 +195,22 @@ def temperature_to_conductivity(
         Activation energy for H+ ions (J). Default: 0.20 eV.
     E_ssCl : float, optional
         Activation energy for ss-Cl ions (J). Default: 0.19 eV.
+    E_NH4p : float, optional
+        Activation energy for NH4+ ions (J). Default: 0.23 eV.
+        Only present in Greenland. Not used if molar_NH4p is None, NH4+ will be assumed to be absent.
     mu_Hp : float, optional
         Molar conductivity for H+ (S/m per mol/L). Default: 3.2.
     mu_ssCl : float, optional
         Molar conductivity for ss-Cl (S/m per mol/L). Default: 0.43.
+    mu_NH4p : float, optional
+        Molar conductivity for NH4+ (S/m per mol/L). Default: 0.8.
     molar_ssCl : float, optional
         Molar concentration of ss-Cl (mol). Default: 4.2e-6.
     molar_Hp : float, optional
         Molar concentration of H+ (mol). Default: 2.7e-6.
+    molar_NH4p : float, optional
+        Molar concentration of NH4+ (mol). Default: None.
+        Only present in Greenland. If no input, NH4+ will be assumed to be absent.
 
     Returns
     -------
@@ -223,12 +234,28 @@ def temperature_to_conductivity(
         E_Hp = 0.20 * eV
     if E_ssCl is None:
         E_ssCl = 0.19 * eV
+    if E_NH4p is None:
+        E_NH4p = 0.23 * eV
+    if E_NH4p is None:
+        E_NH4p = 0.23 * eV
+    if mu_Hp is None:
+        mu_Hp = 3.2
+    if mu_ssCl is None:
+        mu_ssCl = 0.43
+    if mu_NH4p is None:
+        mu_NH4p = 0.8
 
     sigma_ice  = sigma0   * np.exp((Epure  / k) * (1 / Tr - 1.0 / T))
     sigma_Hp   = mu_Hp    * molar_Hp   * np.exp((E_Hp   / k) * (1 / Tr - 1.0 / T))
     sigma_ssCl = mu_ssCl  * molar_ssCl * np.exp((E_ssCl / k) * (1 / Tr - 1.0 / T))
+    sigma_NH4p = mu_NH4p  * molar_NH4p * np.exp((E_NH4p / k) * (1 / Tr - 1.0 / T))
 
-    return sigma_ice + sigma_Hp + sigma_ssCl
+    if molar_NH4p is not None:
+        sigma_NH4p = mu_NH4p  * molar_NH4p * np.exp((E_NH4p / k) * (1 / Tr - 1.0 / T))
+    else:
+        sigma_NH4p = 0
+
+    return sigma_ice + sigma_Hp + sigma_ssCl + sigma_NH4p
 
 def conductivity_to_atten_rate(sigma):
     """
@@ -314,6 +341,89 @@ def temperature_to_atten_rate_mix(
         mu_ssCl=mu_ssCl,
         molar_ssCl=molar_ssCl,
         molar_Hp=molar_Hp,
+    )
+
+    return conductivity_to_atten_rate(sigma)
+
+def temperature_to_atten_rate_mix_GrISfraction(
+    T,
+    Hol_f,
+    LGP_f,
+    sigma0=6.6e-6,
+    Epure=None,
+    E_Hp=None,
+    E_ssCl=None,
+    E_NH4p=None,
+    mu_Hp=None,
+    mu_ssCl=None,
+    mu_NH4p=None
+    ):
+    """
+    Calculate one-way radar attenuation rate from a temperature profile,
+    accounting for pure-ice conductivity and ionic (H+, ss-Cl) contributions
+    via an Arrhenius mixing model. Concentration of individual chemical species
+    are calculated from thickness fraction of holocene and LGP ice.
+    Chemical species: H+, ss-Cl, NH4+
+
+    Parameters
+    ----------
+    T : float or array-like
+        Temperature in Kelvin.
+    sigma0 : float, optional
+        Pure-ice conductivity pre-factor (S/m). Default: 6.6e-6.
+    Epure : float, optional
+        Activation energy for pure ice (eV). Default: 0.55 eV.
+    E_Hp : float, optional
+        Activation energy for H+ ions (eV). Default: 0.20 eV.
+    E_ssCl : float, optional
+        Activation energy for ss-Cl ions (eV). Default: 0.19 eV.
+    E_NH4p : float, optional
+        Activation energy for NH4+ ions (eV). Default: 0.23 eV.
+    mu_Hp : float, optional
+        Molar conductivity for H+ (S/m per mol/L). Default: 3.2.
+    mu_ssCl : float, optional
+        Molar conductivity for ss-Cl (S/m per mol/L). Default: 0.43.
+    mu_NH4p : float, optional
+        Molar conductivity for ss-Cl (S/m per mol/L). Default: 0.8.
+
+    Returns
+    -------
+    N : np.ndarray
+        One-way attenuation rate (dB/km).
+
+    References
+    ----------
+    MacGregor et al. (2007), Table 1 & 2.
+    """
+
+    # chemical molar concentrations for GrIS
+    # Holocene
+    molar_Hp_Hol   = 1.6e-6; # M, +-1.2e-6
+    molar_ssCl_Hol = 0.4e-6; # M, +-0.4e-6
+    molar_NH4p_Hol = 0.5e-6; # M, +-0.6e-6
+    # LGP
+    molar_Hp_LGP   = 0.2e-6; # M, +-0.5e-6
+    molar_ssCl_LGP = 1.8e-6; # M, +-1e-6
+    molar_NH4p_LGP = 0.4e-6; # M, +-0.4e-6
+
+    molar_Hp   = molar_Hp_Hol * Hol_f + molar_Hp_LGP * LGP_f
+    molar_ssCl = molar_ssCl_Hol * Hol_f + molar_ssCl_LGP * LGP_f
+    molar_NH4p = molar_NH4p_Hol * Hol_f + molar_NH4p_LGP * LGP_f
+
+
+    sigma = temperature_to_conductivity(
+        T,
+        sigma0=sigma0,
+        Epure=Epure,
+        E_Hp=E_Hp,
+        E_ssCl=E_ssCl,
+        E_NH4p=E_NH4p,
+        mu_Hp=mu_Hp,
+        mu_ssCl=mu_ssCl,
+        mu_NH4p=mu_NH4p,
+        molar_ssCl=molar_ssCl,
+        molar_Hp=molar_Hp,
+        molar_NH4p=molar_NH4p
     )
 
     return conductivity_to_atten_rate(sigma)
@@ -565,5 +675,4 @@ def temperature_to_rigidity(temperature):
     rigidity[rigidity < 0] = 1e6
 
     return rigidity
-
 
