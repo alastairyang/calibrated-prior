@@ -9,5 +9,7 @@
 *.npz
 *.pkl
 *.yml
-/data/
+/data/NGrIS/ensemble_data_pixelated/enthalpy_avg_grid.mat
+/data/NGrIS/ensemble_data_pixelated/Eb_samples/
+/data/NGrIS/ensemble_data_pixelated/Em_samples/
 /testing/normflows_examples/datasets

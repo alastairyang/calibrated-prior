@@ -168,7 +168,9 @@ def atten_rate_to_temperature_ice(atten_rate):
 
 def temperature_to_conductivity(
     T,
-    sigma0=6.6e-6,
+    kind,
+    beta=None,
+    sigma0=None,
     Epure=None,
     E_Hp=None,
     E_ssCl=None,
@@ -176,8 +178,8 @@ def temperature_to_conductivity(
     mu_Hp=None,
     mu_ssCl=None,
     mu_NH4p=None,
-    molar_ssCl=4.2e-6,
-    molar_Hp=2.7e-6,
+    molar_ssCl=None,
+    molar_Hp=None,
     molar_NH4p=None
 ):
     """
@@ -187,23 +189,27 @@ def temperature_to_conductivity(
     ----------
     T : float or array-like
         Temperature in Kelvin.
+    kind: string
+        W97 or M07 chemistry
+    beta: float
+        Correction factor for sigma in MacGregor et al. 2015. Only used for W97. Default: 1.
     sigma0 : float, optional
-        Pure-ice conductivity pre-factor (S/m). Default: 6.6e-6.
+        Pure-ice conductivity pre-factor (S/m). Default: 9e-6 for W97, 9.2e-6 for M07, 
     Epure : float, optional
-        Activation energy for pure ice (J). Default: 0.55 eV.
+        Activation energy for pure ice (J). Default: 0.58 eV for W97, 0.51 eV for M07.
     E_Hp : float, optional
-        Activation energy for H+ ions (J). Default: 0.20 eV.
+        Activation energy for H+ ions (J). Default: 0.21 eV for W97, 0.20 eV for M07.
     E_ssCl : float, optional
-        Activation energy for ss-Cl ions (J). Default: 0.19 eV.
+        Activation energy for ss-Cl ions (J). Default: 0.23 eV for W97, 0.19 eV for M07.
     E_NH4p : float, optional
-        Activation energy for NH4+ ions (J). Default: 0.23 eV.
-        Only present in Greenland. Not used if molar_NH4p is None, NH4+ will be assumed to be absent.
+        Activation energy for NH4+ ions (J). Default: 0.23 eV for W97, 0.23 eV for M07.
+        If molar_NH4p is None, NH4+ will be assumed to be absent.
     mu_Hp : float, optional
-        Molar conductivity for H+ (S/m per mol/L). Default: 3.2.
+        Molar conductivity for H+ (S/m per mol/L). Default: 4 for W97, 3.2 for M07.
     mu_ssCl : float, optional
-        Molar conductivity for ss-Cl (S/m per mol/L). Default: 0.43.
+        Molar conductivity for ss-Cl (S/m per mol/L). Default: 0.55 for W97, 0.43 for M07.
     mu_NH4p : float, optional
-        Molar conductivity for NH4+ (S/m per mol/L). Default: 0.8.
+        Molar conductivity for NH4+ (S/m per mol/L). Default: 1 for W97, 0.8 for M07.
     molar_ssCl : float, optional
         Molar concentration of ss-Cl (mol). Default: 4.2e-6.
     molar_Hp : float, optional
@@ -219,43 +225,77 @@ def temperature_to_conductivity(
 
     References
     ----------
-    MacGregor et al. (2007), Table 1 & 2.
+    MacGregor et al. (2015), Table 2.
     """
     T = np.asarray(T, dtype=float)
 
     # Physical constants
-    Tr  = 251.0
     k   = 1.380e-23
     eV  = 1.602176634e-19
 
-    if Epure is None:
-        Epure = 0.55 * eV
-    if E_Hp is None:
-        E_Hp = 0.20 * eV
-    if E_ssCl is None:
-        E_ssCl = 0.19 * eV
-    if E_NH4p is None:
-        E_NH4p = 0.23 * eV
-    if E_NH4p is None:
-        E_NH4p = 0.23 * eV
-    if mu_Hp is None:
-        mu_Hp = 3.2
-    if mu_ssCl is None:
-        mu_ssCl = 0.43
-    if mu_NH4p is None:
-        mu_NH4p = 0.8
+    # default concentrations
+    # if molar_NH4p is None, assume it is not present
+    if molar_ssCl is None:
+        molar_ssCl = 4.2e-6
+    if molar_Hp is None:
+        molar_Hp = 2.7e-6
 
+    match kind:
+        case "W97":
+            Tr  = 258.15 # referene temperature W97
+            if beta is None:
+                beta = 1
+            if sigma0 is None:
+                sigma0 = 9e-6
+            if Epure is None:
+                Epure = 0.58 * eV
+            if E_Hp is None:
+                E_Hp = 0.21 * eV
+            if E_ssCl is None:
+                E_ssCl = 0.23 * eV
+            if E_NH4p is None:
+                E_NH4p = 0.23 * eV
+            if mu_Hp is None:
+                mu_Hp = 4
+            if mu_ssCl is None:
+                mu_ssCl = 0.55
+            if mu_NH4p is None:
+                mu_NH4p = 1
+        case "M07":
+            Tr  = 252.15 # referene temperature M07
+            if beta is None:
+                beta = 1
+            elif beta is not None:
+                raise ValueError("Beta correction factor is only used for W97 chemistry.")
+            if sigma0 is None:
+                sigma0 = 9.2e-6
+            if Epure is None:
+                Epure = 0.51 * eV
+            if E_Hp is None:
+                E_Hp = 0.20 * eV
+            if E_ssCl is None:
+                E_ssCl = 0.19 * eV
+            if E_NH4p is None:
+                E_NH4p = 0.23 * eV
+            if mu_Hp is None:
+                mu_Hp = 3.2
+            if mu_ssCl is None:
+                mu_ssCl = 0.43
+            if mu_NH4p is None:
+                mu_NH4p = 0.8
+        case "_":
+            raise ValueError("Invalid chemistry type. Select 'W97' or 'M07'.")
+    
     sigma_ice  = sigma0   * np.exp((Epure  / k) * (1 / Tr - 1.0 / T))
     sigma_Hp   = mu_Hp    * molar_Hp   * np.exp((E_Hp   / k) * (1 / Tr - 1.0 / T))
     sigma_ssCl = mu_ssCl  * molar_ssCl * np.exp((E_ssCl / k) * (1 / Tr - 1.0 / T))
-    sigma_NH4p = mu_NH4p  * molar_NH4p * np.exp((E_NH4p / k) * (1 / Tr - 1.0 / T))
 
     if molar_NH4p is not None:
         sigma_NH4p = mu_NH4p  * molar_NH4p * np.exp((E_NH4p / k) * (1 / Tr - 1.0 / T))
     else:
         sigma_NH4p = 0
 
-    return sigma_ice + sigma_Hp + sigma_ssCl + sigma_NH4p
+    return (sigma_ice + sigma_Hp + sigma_ssCl + sigma_NH4p) * beta
 
 def conductivity_to_atten_rate(sigma):
     """
@@ -287,14 +327,19 @@ def conductivity_to_atten_rate(sigma):
 
 def temperature_to_atten_rate_mix(
     T,
-    sigma0=6.6e-6,
+    kind="W97",
+    beta=None,
+    sigma0=None,
     Epure=None,
     E_Hp=None,
     E_ssCl=None,
-    mu_Hp=3.2,
-    mu_ssCl=0.43,
-    molar_ssCl=4.2e-6,
-    molar_Hp=2.7e-6,
+    E_NH4p=None,
+    mu_Hp=None,
+    mu_ssCl=None,
+    mu_NH4p=None,
+    molar_ssCl=None,
+    molar_Hp=None,
+    molar_NH4p=None
 ):
     """
     Calculate one-way radar attenuation rate from a temperature profile,
@@ -307,6 +352,8 @@ def temperature_to_atten_rate_mix(
         Temperature in Kelvin.
     sigma0 : float, optional
         Pure-ice conductivity pre-factor (S/m). Default: 6.6e-6.
+    beta: float
+        Correction factor for sigma in MacGregor et al. 2015. Only used for W97. Default: 1.
     Epure : float, optional
         Activation energy for pure ice (J). Default: 0.55 eV.
     E_Hp : float, optional
@@ -333,14 +380,19 @@ def temperature_to_atten_rate_mix(
     """
     sigma = temperature_to_conductivity(
         T,
+        kind,
+        beta=beta,
         sigma0=sigma0,
         Epure=Epure,
         E_Hp=E_Hp,
         E_ssCl=E_ssCl,
+        E_NH4p=E_NH4p,
         mu_Hp=mu_Hp,
         mu_ssCl=mu_ssCl,
+        mu_NH4p=mu_NH4p,
         molar_ssCl=molar_ssCl,
         molar_Hp=molar_Hp,
+        molar_NH4p=molar_NH4p
     )
 
     return conductivity_to_atten_rate(sigma)
@@ -349,7 +401,9 @@ def temperature_to_atten_rate_mix_GrISfraction(
     T,
     Hol_f,
     LGP_f,
-    sigma0=6.6e-6,
+    kind = "W97",
+    beta = None,
+    sigma0=None,
     Epure=None,
     E_Hp=None,
     E_ssCl=None,
@@ -369,6 +423,250 @@ def temperature_to_atten_rate_mix_GrISfraction(
     ----------
     T : float or array-like
         Temperature in Kelvin.
+    kind: string
+        W97 or M07 chemistry
+    sigma0 : float, optional
+        Pure-ice conductivity pre-factor (S/m). Default: 6.6e-6.
+    beta: float
+        Correction factor for sigma in MacGregor et al. 2015. Only used for W97. Default: 1.
+    Epure : float, optional
+        Activation energy for pure ice (eV). Default: 0.55 eV.
+    E_Hp : float, optional
+        Activation energy for H+ ions (eV). Default: 0.20 eV.
+    E_ssCl : float, optional
+        Activation energy for ss-Cl ions (eV). Default: 0.19 eV.
+    E_NH4p : float, optional
+        Activation energy for NH4+ ions (eV). Default: 0.23 eV.
+    mu_Hp : float, optional
+        Molar conductivity for H+ (S/m per mol/L). Default: 3.2.
+    mu_ssCl : float, optional
+        Molar conductivity for ss-Cl (S/m per mol/L). Default: 0.43.
+    mu_NH4p : float, optional
+        Molar conductivity for ss-Cl (S/m per mol/L). Default: 0.8.
+
+    Returns
+    -------
+    N : np.ndarray
+        One-way attenuation rate (dB/km).
+
+    References
+    ----------
+    MacGregor et al. (2007), Table 1 & 2.
+    """
+
+    # chemical molar concentrations for GrIS
+    # Holocene
+    molar_Hp_Hol   = 1.6e-6; # M, +-1.2e-6
+    molar_ssCl_Hol = 0.4e-6; # M, +-0.4e-6
+    molar_NH4p_Hol = 0.5e-6; # M, +-0.6e-6
+    # LGP
+    molar_Hp_LGP   = 0.2e-6; # M, +-0.5e-6
+    molar_ssCl_LGP = 1.8e-6; # M, +-1e-6
+    molar_NH4p_LGP = 0.4e-6; # M, +-0.4e-6
+
+    molar_Hp   = molar_Hp_Hol * Hol_f + molar_Hp_LGP * LGP_f
+    molar_ssCl = molar_ssCl_Hol * Hol_f + molar_ssCl_LGP * LGP_f
+    molar_NH4p = molar_NH4p_Hol * Hol_f + molar_NH4p_LGP * LGP_f
+
+    sigma = temperature_to_conductivity(
+        T,
+        kind=kind,
+        beta=beta,
+        sigma0=sigma0,
+        Epure=Epure,
+        E_Hp=E_Hp,
+        E_ssCl=E_ssCl,
+        E_NH4p=E_NH4p,
+        mu_Hp=mu_Hp,
+        mu_ssCl=mu_ssCl,
+        mu_NH4p=mu_NH4p,
+        molar_ssCl=molar_ssCl,
+        molar_Hp=molar_Hp,
+        molar_NH4p=molar_NH4p
+    )
+
+    return conductivity_to_atten_rate(sigma)
+
+from scipy.optimize import brentq, minimize_scalar
+import numpy as np
+
+
+def atten_rate_to_temperature_mix(
+    N,
+    T_bounds=(200.0, 273.15),
+    kind="W97",
+    beta=None,
+    sigma0=None,
+    Epure=None,
+    E_Hp=None,
+    E_ssCl=None,
+    E_NH4p=None,
+    mu_Hp=None,
+    mu_ssCl=None,
+    mu_NH4p=None,
+    molar_ssCl=None,
+    molar_Hp=None,
+    molar_NH4p=None
+):
+    """
+    Invert attenuation rate back to temperature using a bounded root-finding
+    approach (Brent's method), with a fallback to minimization if the target
+    lies outside the monotonic range of the forward model.
+
+    The forward model  N(T) = conductivity_to_atten_rate(temperature_to_conductivity(T))
+    is strictly monotonically increasing in T, so a unique inverse exists
+    within any physically valid temperature range.
+
+    Parameters
+    ----------
+    N : float or array-like
+        One-way attenuation rate (dB/km).
+    T_bounds : tuple of float, optional
+        (T_min, T_max) search bracket in Kelvin. Default: (200.0, 273.15).
+    kind: string
+        W97 or M07 chemistry
+    sigma0 : float, optional
+        Pure-ice conductivity pre-factor (S/m). Default: 9e-6 for W97, 9.2e-6 for M07, 
+    Epure : float, optional
+        Activation energy for pure ice (J). Default: 0.58 eV for W97, 0.51 eV for M07.
+    E_Hp : float, optional
+        Activation energy for H+ ions (J). Default: 0.21 eV for W97, 0.20 eV for M07.
+    E_ssCl : float, optional
+        Activation energy for ss-Cl ions (J). Default: 0.23 eV for W97, 0.19 eV for M07.
+    E_NH4p : float, optional
+        Activation energy for NH4+ ions (J). Default: 0.23 eV for W97, 0.23 eV for M07.
+        If molar_NH4p is None, NH4+ will be assumed to be absent.
+    mu_Hp : float, optional
+        Molar conductivity for H+ (S/m per mol/L). Default: 4 for W97, 3.2 for M07.
+    mu_ssCl : float, optional
+        Molar conductivity for ss-Cl (S/m per mol/L). Default: 0.55 for W97, 0.43 for M07.
+    mu_NH4p : float, optional
+        Molar conductivity for NH4+ (S/m per mol/L). Default: 1 for W97, 0.8 for M07.
+    molar_ssCl : float, optional
+        Molar concentration of ss-Cl (mol). Default: 4.2e-6.
+    molar_Hp : float, optional
+        Molar concentration of H+ (mol). Default: 2.7e-6.
+    molar_NH4p : float, optional
+        Molar concentration of NH4+ (mol). Default: None.
+        Only present in Greenland. If no input, NH4+ will be assumed to be absent.
+
+    Returns
+    -------
+    T : np.ndarray
+        Recovered temperature in Kelvin. Values that fall outside T_bounds
+        are returned as np.nan with a warning.
+
+    References
+    ----------
+    MacGregor et al. (2007), Table 1 & 2.
+    """
+    N = np.atleast_1d(np.asarray(N, dtype=float))
+
+    # Package all chemistry kwargs for clean forwarding
+    chemistry = dict(
+        kind=kind,
+        sigma0=sigma0,
+        beta=beta,
+        Epure=Epure,
+        E_Hp=E_Hp,
+        E_ssCl=E_ssCl,
+        E_NH4p=E_NH4p,
+        mu_Hp=mu_Hp,
+        mu_ssCl=mu_ssCl,
+        mu_NH4p=mu_NH4p,
+        molar_ssCl=molar_ssCl,
+        molar_Hp=molar_Hp,
+        molar_NH4p=molar_NH4p
+    )
+
+    T_min, T_max = T_bounds
+
+    # Pre-compute forward model at bracket edges to check range
+    N_min = temperature_to_atten_rate_mix(T_min, **chemistry)
+    N_max = temperature_to_atten_rate_mix(T_max, **chemistry)
+
+    def _forward_residual(T_scalar, N_target_single):
+        """Residual: N(T) - N_target_single = 0 at the solution."""
+        return temperature_to_atten_rate_mix(T_scalar, **chemistry) - N_target_single
+
+    def _solve_single(N_target_single):
+        """Solve for a single scalar attenuation rate value."""
+
+        # Check if target is within the forward model's range
+        if N_target_single < N_min:
+            print(
+                f"Warning: N={N_target_single:.4f} dB/km is below the minimum "
+                f"N({T_min} K)={N_min:.4f} dB/km. Returning NaN."
+            )
+            return np.nan
+
+        if N_target_single > N_max:
+            print(
+                f"Warning: N={N_target_single:.4f} dB/km exceeds the maximum "
+                f"N({T_max} K)={N_max:.4f} dB/km. Returning NaN."
+            )
+            return np.nan
+
+        # Brent's method: fast, robust, guaranteed convergence on a bracket
+        try:
+            T_solution = brentq(
+                _forward_residual,
+                T_min,
+                T_max,
+                args=(N_target_single,),
+                xtol=1e-6,   # tolerance in K
+                maxiter=200,
+            )
+            return T_solution
+
+        except ValueError:
+            # Fallback: if brentq bracket fails for any reason, use minimization
+            result = minimize_scalar(
+                lambda T: _forward_residual(T, N_target_single) ** 2,
+                bounds=(T_min, T_max),
+                method="bounded",
+            )
+            if result.success:
+                return result.x
+            else:
+                print(f"Warning: optimization failed for N={N_target_single:.4f}. Returning NaN.")
+                return np.nan
+
+    # Vectorize over input array
+    T_out = np.array([_solve_single(N_target_single) for N_target_single in N.ravel()])
+
+    return T_out.reshape(N.shape)
+
+def temperature_to_atten_rate_mix_GrISfraction(
+    T,
+    Hol_f,
+    LGP_f,
+    kind = "W97",
+    beta = None,
+    sigma0=None,
+    Epure=None,
+    E_Hp=None,
+    E_ssCl=None,
+    E_NH4p=None,
+    mu_Hp=None,
+    mu_ssCl=None,
+    mu_NH4p=None
+    ):
+    """
+    Calculate one-way radar attenuation rate from a temperature profile,
+    accounting for pure-ice conductivity and ionic (H+, ss-Cl) contributions
+    via an Arrhenius mixing model. Concentration of individual chemical species
+    are calculated from thickness fraction of holocene and LGP ice.
+    Chemical species: H+, ss-Cl, NH4+
+
+    Parameters
+    ----------
+    T : float or array-like
+        Temperature in Kelvin.
+    kind: string
+        W97 or M07 chemistry
+    beta: float
+        Correction factor for sigma in MacGregor et al. 2015. Only used for W97. Default: 1.
     sigma0 : float, optional
         Pure-ice conductivity pre-factor (S/m). Default: 6.6e-6.
     Epure : float, optional
@@ -410,9 +708,10 @@ def temperature_to_atten_rate_mix_GrISfraction(
     molar_ssCl = molar_ssCl_Hol * Hol_f + molar_ssCl_LGP * LGP_f
     molar_NH4p = molar_NH4p_Hol * Hol_f + molar_NH4p_LGP * LGP_f
 
-
     sigma = temperature_to_conductivity(
         T,
+        kind=kind,
+        beta=beta,
         sigma0=sigma0,
         Epure=Epure,
         E_Hp=E_Hp,
@@ -432,17 +731,21 @@ from scipy.optimize import brentq, minimize_scalar
 import numpy as np
 
 
-def atten_rate_to_temperature_mix(
+def atten_rate_to_temperature_mix_GrISfraction(
     N,
+    Hol_f,
+    LGP_f,
     T_bounds=(200.0, 273.15),
-    sigma0=6.6e-6,
+    kind="W97",
+    beta=None,
+    sigma0=None,
     Epure=None,
     E_Hp=None,
     E_ssCl=None,
-    mu_Hp=3.2,
-    mu_ssCl=0.43,
-    molar_ssCl=4.2e-6,
-    molar_Hp=2.7e-6,
+    E_NH4p=None,
+    mu_Hp=None,
+    mu_ssCl=None,
+    mu_NH4p=None,
 ):
     """
     Invert attenuation rate back to temperature using a bounded root-finding
@@ -457,24 +760,40 @@ def atten_rate_to_temperature_mix(
     ----------
     N : float or array-like
         One-way attenuation rate (dB/km).
+    Hol_f: float or array-like
+        Holocene ice thickness fraction (0-1), must be same shape as N
+    LGP_f: float or array-like
+        LGP ice thickness fraction (0-1), must be same shape as N
+    beta: float
+        Correction factor for sigma in MacGregor et al. 2015. Only used for W97. Default: 1.
     T_bounds : tuple of float, optional
         (T_min, T_max) search bracket in Kelvin. Default: (200.0, 273.15).
+    kind: string
+        W97 or M07 chemistry
     sigma0 : float, optional
-        Pure-ice conductivity pre-factor (S/m). Default: 6.6e-6.
+        Pure-ice conductivity pre-factor (S/m). Default: 9e-6 for W97, 9.2e-6 for M07, 
     Epure : float, optional
-        Activation energy for pure ice (J). Default: 0.55 eV.
+        Activation energy for pure ice (J). Default: 0.58 eV for W97, 0.51 eV for M07.
     E_Hp : float, optional
-        Activation energy for H+ ions (J). Default: 0.20 eV.
+        Activation energy for H+ ions (J). Default: 0.21 eV for W97, 0.20 eV for M07.
     E_ssCl : float, optional
-        Activation energy for ss-Cl ions (J). Default: 0.19 eV.
+        Activation energy for ss-Cl ions (J). Default: 0.23 eV for W97, 0.19 eV for M07.
+    E_NH4p : float, optional
+        Activation energy for NH4+ ions (J). Default: 0.23 eV for W97, 0.23 eV for M07.
+        If molar_NH4p is None, NH4+ will be assumed to be absent.
     mu_Hp : float, optional
-        Molar conductivity for H+ (S/m per mol/L). Default: 3.2.
+        Molar conductivity for H+ (S/m per mol/L). Default: 4 for W97, 3.2 for M07.
     mu_ssCl : float, optional
-        Molar conductivity for ss-Cl (S/m per mol/L). Default: 0.43.
+        Molar conductivity for ss-Cl (S/m per mol/L). Default: 0.55 for W97, 0.43 for M07.
+    mu_NH4p : float, optional
+        Molar conductivity for NH4+ (S/m per mol/L). Default: 1 for W97, 0.8 for M07.
     molar_ssCl : float, optional
         Molar concentration of ss-Cl (mol). Default: 4.2e-6.
     molar_Hp : float, optional
         Molar concentration of H+ (mol). Default: 2.7e-6.
+    molar_NH4p : float, optional
+        Molar concentration of NH4+ (mol). Default: None.
+        Only present in Greenland. If no input, NH4+ will be assumed to be absent.
 
     Returns
     -------
@@ -485,45 +804,73 @@ def atten_rate_to_temperature_mix(
     References
     ----------
     MacGregor et al. (2007), Table 1 & 2.
+    MacGregor et al. (2015)
     """
     N = np.atleast_1d(np.asarray(N, dtype=float))
+    Hol_f = np.atleast_1d(np.asarray(Hol_f, dtype=float))
+    LGP_f = np.atleast_1d(np.asarray(LGP_f, dtype=float))
 
-    # Package all chemistry kwargs for clean forwarding
-    chemistry = dict(
-        sigma0=sigma0,
-        Epure=Epure,
-        E_Hp=E_Hp,
-        E_ssCl=E_ssCl,
-        mu_Hp=mu_Hp,
-        mu_ssCl=mu_ssCl,
-        molar_ssCl=molar_ssCl,
-        molar_Hp=molar_Hp,
-    )
+    # chemical molar concentrations for GrIS
+    # Holocene
+    molar_Hp_Hol   = 1.6e-6; # M, +-1.2e-6
+    molar_ssCl_Hol = 0.4e-6; # M, +-0.4e-6
+    molar_NH4p_Hol = 0.5e-6; # M, +-0.6e-6
+    # LGP
+    molar_Hp_LGP   = 0.2e-6; # M, +-0.5e-6
+    molar_ssCl_LGP = 1.8e-6; # M, +-1e-6
+    molar_NH4p_LGP = 0.4e-6; # M, +-0.4e-6
 
-    T_min, T_max = T_bounds
+    T_min, T_max = T_bounds    
+    
+    def _forward_residual(T_scalar, N_target_single, chemistry):
+        """Residual: N(T) - N_target_single = 0 at the solution."""
+        # print(f"Residual: {(temperature_to_atten_rate_mix(T_scalar, **chemistry) - N_target_single)}")
+        # print(temperature_to_atten_rate_mix(T_scalar, **chemistry) - N_target_single)
+        return temperature_to_atten_rate_mix(T_scalar, **chemistry) - N_target_single
 
-    # Pre-compute forward model at bracket edges to check range
-    N_min = temperature_to_atten_rate_mix(T_min, **chemistry)
-    N_max = temperature_to_atten_rate_mix(T_max, **chemistry)
-
-    def _forward_residual(T_scalar, N_target):
-        """Residual: N(T) - N_target = 0 at the solution."""
-        return temperature_to_atten_rate_mix(T_scalar, **chemistry) - N_target
-
-    def _solve_single(N_target):
+    def _solve_single(N_target_single, Hol_f_single, LGP_f_single):
         """Solve for a single scalar attenuation rate value."""
 
         # Check if target is within the forward model's range
-        if N_target < N_min:
+        # Pre-compute forward model at bracket edges to check range
+        # print(Hol_f_single)
+        # print(LGP_f_single)
+
+        molar_Hp   = molar_Hp_Hol * Hol_f_single + molar_Hp_LGP * LGP_f_single
+        molar_ssCl = molar_ssCl_Hol * Hol_f_single + molar_ssCl_LGP * LGP_f_single
+        molar_NH4p = molar_NH4p_Hol * Hol_f_single + molar_NH4p_LGP * LGP_f_single
+
+        # Package all chemistry kwargs for clean forwarding
+        # for a single point
+        chemistry = dict(
+            kind=kind,
+            sigma0=sigma0,
+            beta=beta,
+            Epure=Epure,
+            E_Hp=E_Hp,
+            E_ssCl=E_ssCl,
+            E_NH4p=E_NH4p,
+            mu_Hp=mu_Hp,
+            mu_ssCl=mu_ssCl,
+            mu_NH4p=mu_NH4p,
+            molar_ssCl=molar_ssCl,
+            molar_Hp=molar_Hp,
+            molar_NH4p=molar_NH4p
+        )
+        
+        N_min = temperature_to_atten_rate_mix(T_min, **chemistry)
+        N_max = temperature_to_atten_rate_mix(T_max, **chemistry)
+
+        if N_target_single < N_min:
             print(
-                f"Warning: N={N_target:.4f} dB/km is below the minimum "
+                f"Warning: N={N_target_single:.4f} dB/km is below the minimum "
                 f"N({T_min} K)={N_min:.4f} dB/km. Returning NaN."
             )
             return np.nan
 
-        if N_target > N_max:
+        if N_target_single > N_max:
             print(
-                f"Warning: N={N_target:.4f} dB/km exceeds the maximum "
+                f"Warning: N={N_target_single:.4f} dB/km exceeds the maximum "
                 f"N({T_max} K)={N_max:.4f} dB/km. Returning NaN."
             )
             return np.nan
@@ -534,7 +881,7 @@ def atten_rate_to_temperature_mix(
                 _forward_residual,
                 T_min,
                 T_max,
-                args=(N_target,),
+                args=(N_target_single, chemistry),
                 xtol=1e-6,   # tolerance in K
                 maxiter=200,
             )
@@ -543,18 +890,18 @@ def atten_rate_to_temperature_mix(
         except ValueError:
             # Fallback: if brentq bracket fails for any reason, use minimization
             result = minimize_scalar(
-                lambda T: _forward_residual(T, N_target) ** 2,
+                lambda T: _forward_residual(T, N_target_single) ** 2,
                 bounds=(T_min, T_max),
                 method="bounded",
             )
             if result.success:
                 return result.x
             else:
-                print(f"Warning: optimization failed for N={N_target:.4f}. Returning NaN.")
+                print(f"Warning: optimization failed for N={N_target_single:.4f}. Returning NaN.")
                 return np.nan
 
     # Vectorize over input array
-    T_out = np.array([_solve_single(n) for n in N.ravel()])
+    T_out = np.array([_solve_single(N_target_single, Hol_f_single, LGP_f_single) for N_target_single, Hol_f_single, LGP_f_single in zip(N.ravel(), Hol_f.ravel(), LGP_f.ravel())])
 
     return T_out.reshape(N.shape)
 
