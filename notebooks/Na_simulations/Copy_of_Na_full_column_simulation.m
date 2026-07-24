@@ -8,6 +8,13 @@ end
 
 addpath ~/Documents/Glaciology/calibrated-prior/src/
 
+targetFolder = '~/Documents/Glaciology/GrIS-thermal-inference/North_GrIS_results/models/North_GrIS_smb_max_models/ensemble'; 
+fileExtension = '*.mat';
+searchPattern = fullfile(targetFolder, '**', fileExtension);
+fileStruct = dir(searchPattern);
+fileStruct = fileStruct(~[fileStruct.isdir]);
+md_filelist = fullfile({fileStruct.folder}, {fileStruct.name});
+
 % load Joe's version 2 attenu data
 load radar_x_y_attenu_Tm_v2.mat
 %%
@@ -15,10 +22,8 @@ load radar_x_y_attenu_Tm_v2.mat
 beta = 2.6;
 kind = 'W97';
 
-md_filelist = ["/Users/leo/Documents/Glaciology/North_GrIS/North_GrIS_cluster_run_models/North_GrIS_models_smb_max/ensemble/North_GrIS_thermal_1.mat", ...
-    "/Users/leo/Documents/Glaciology/North_GrIS/North_GrIS_cluster_run_models/North_GrIS_models_smb_max/ensemble/North_GrIS_thermal_2.mat"];
-md_example = loadmodel(md_filelist(1));
-md_num_layers = md.mesh.numberoflayers;
+md_example = loadmodel(md_filelist{1});
+md_num_layers = md_example.mesh.numberoflayers;
 % NOTE: all models must have the same geometry
 
 depth_md = cell(size(radar_x_y_attenu_Tm_v2, 1), 1);
@@ -38,8 +43,8 @@ for idx_radar = 1:size(radar_x_y_attenu_Tm_v2, 1)
     % store temperature and depth profile 
     T_md_point = NaN([size(md_filelist, 2), md_num_layers]);
     depth_md_point = NaN([size(md_filelist, 2), md_num_layers]);
-    Na_full_sim_point = NaN(size(md_filelist, 2));
-    Na_obs_sim_point = NaN(size(md_filelist, 2));
+    Na_full_sim_point = NaN(size(md_filelist, 2), 1);
+    Na_obs_sim_point = NaN(size(md_filelist, 2), 1);
 
     % find idx of corresponding on md
     % NOTE: all models must have same geometry
@@ -52,20 +57,22 @@ for idx_radar = 1:size(radar_x_y_attenu_Tm_v2, 1)
     min_dist = min(dist);
 
     idx_point_on_md = find(dist == min_dist);
+
     if (length(idx_point_on_md) ~= md_num_layers)
         error("check md")
     end
 
-    % if closest model point is 100 km away, skip
+    % if closest model point is 10 km away, skip
     if min_dist >= 100 * 1e3
         table_row_out_of_bound(idx_radar) = 1;
+        disp("Radar observation not in model boundary, skipping")
         continue
     end
 
     for idx_md = 1:size(md_filelist, 2)
-        %disp(['loading model ' num2str(idx_md) ' / ' num2str(size(md_filelist, 1))])
+        disp(['loading model ' num2str(idx_md) ' / ' num2str(size(md_filelist, 2))])
 
-        md = loadmodel(md_filelist(idx_md));
+        md = loadmodel(md_filelist{idx_md});
     
         % for every point in radar data, find its closest point in model
 
@@ -77,26 +84,27 @@ for idx_radar = 1:size(radar_x_y_attenu_Tm_v2, 1)
 
         pmp_point_on_md = compute_pmp_from_pressure(md.results.SteadystateSolution.Pressure(idx_point_on_md));
         
-        T_point_on_md = enthalpy_to_temperature(E_pt, pmp_point_on_md);
+        T_point_on_md = enthalpy_to_temperature(E_point_on_md, pmp_point_on_md);
         depth_point_on_md = max(md.mesh.z(idx_point_on_md)) - md.mesh.z(idx_point_on_md);
         
         T_md_point(idx_md, :) = flipud(T_point_on_md)';
-        depth_md_point(idx_md, :) = flipud(depth_pt)';
+        depth_md_point(idx_md, :) = flipud(depth_point_on_md)';
         
         %%
 
         % interpolate modeled temperature to depths of radar observations
 
         Hp_sample = radar_x_y_attenu_Tm_v2.Hp(idx_radar);
-        Hp_sample = Hp_sample{idx_radar};
+        Hp_sample = Hp_sample{1};
         ssCl_sample = radar_x_y_attenu_Tm_v2.ssCl(idx_radar);
-        ssCl_sample = ssCl_sample{idx_radar};
+        ssCl_sample = ssCl_sample{1};
         NH4p_sample = radar_x_y_attenu_Tm_v2.NH4p(idx_radar);
-        NH4p_sample = NH4p_sample{idx_radar};
-        depth_bound_decim_sample = radar_x_y_attenu_Tm_v2.depth_bound_decim(1);
+        NH4p_sample = NH4p_sample{1};
+        depth_bound_decim_sample = radar_x_y_attenu_Tm_v2.depth_bound_decim(idx_radar);
         depth_bound_decim_sample = depth_bound_decim_sample{1};
         
         T_md_sample = T_md_point(idx_md, :);
+        %disp(T_md_sample)
         depth_md_sample = depth_md_point(idx_md, :);
         
         % spline interpolate to depth bounds of chemistry,
@@ -140,7 +148,6 @@ for idx_radar = 1:size(radar_x_y_attenu_Tm_v2, 1)
         % divide by total depth
         Na_full_sim_point_md = Na_full_sim_layer_sum / (depth_full_column(end) - depth_full_column(1));
         Na_full_sim_point(idx_md) = Na_full_sim_point_md;
-
         %%
         % simulate what attenuation rate would be
         % if it is only calculated based on the temperature profile
@@ -174,9 +181,17 @@ for idx_radar = 1:size(radar_x_y_attenu_Tm_v2, 1)
     end
     
     T_md{idx_radar} = T_md_point;
-    depth_md{idx_radar} = depth_md_point;\
-    Na_full_sim{idx_radar}
+    depth_md{idx_radar} = depth_md_point;
+    Na_full_sim{idx_radar} = Na_full_sim_point;
+    Na_obs_sim{idx_radar} = Na_obs_sim_point;
 end
+
+Na_sim_v2 = radar_x_y_attenu_Tm_v2;
+Na_sim_v2.T_md = T_md;
+Na_sim_v2.depth_md = depth_md;
+Na_sim_v2.Na_full_sim = Na_full_sim;
+Na_sim_v2.Na_obs_sim = Na_obs_sim;
+Na_sim_v2(table_row_out_of_bound == 1, :) = [];
 
 
 %%
