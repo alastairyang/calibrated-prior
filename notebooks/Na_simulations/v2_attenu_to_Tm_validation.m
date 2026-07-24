@@ -11,7 +11,7 @@
 % addpath /Users/leo/Documents/Glaciology/North_GrIS_data_processing/scripts/
 %%
 
-load('~/Documents/Glaciology/North_GrIS_data_processing/data/Joe_attenu_v2/atten_all_grn_for_gt.mat')
+load('~/Documents/Glaciology/common_data/Joe_attenu_v2/atten_all_grn_for_gt.mat')
 
 radar_x_y_attenu_Tm_v2_cell = table('size', [0,13], ...
     'VariableTypes', {'cell', 'cell', 'cell', 'cell', ...

@@ -8,6 +8,13 @@ end
 
 addpath ~/Documents/Glaciology/calibrated-prior/src/
 
+targetFolder = '~/Documents/Glaciology/GrIS-thermal-inference/North_GrIS_models/North_GrIS_models_smb_max/ensemble'; 
+fileExtension = '*.mat';
+searchPattern = fullfile(targetFolder, '**', fileExtension);
+fileStruct = dir(searchPattern);
+fileStruct = fileStruct(~[fileStruct.isdir]);
+md_filelist = fullfile({fileStruct.folder}, {fileStruct.name});
+
 % load Joe's version 2 attenu data
 load radar_x_y_attenu_Tm_v2.mat
 %%
@@ -15,9 +22,7 @@ load radar_x_y_attenu_Tm_v2.mat
 beta = 2.6;
 kind = 'W97';
 
-md_filelist = ["/Users/leo/Documents/Glaciology/North_GrIS/North_GrIS_cluster_run_models/North_GrIS_models_smb_max/ensemble/North_GrIS_thermal_1.mat", ...
-    "/Users/leo/Documents/Glaciology/North_GrIS/North_GrIS_cluster_run_models/North_GrIS_models_smb_max/ensemble/North_GrIS_thermal_2.mat"];
-md_example = loadmodel(md_filelist(1));
+md_example = loadmodel(md_filelist{1});
 md_num_layers = md.mesh.numberoflayers;
 % NOTE: all models must have the same geometry
 
@@ -32,7 +37,7 @@ table_row_out_of_bound = zeros(size(radar_x_y_attenu_Tm_v2, 1), 1);
 %%
 % loop through all radar observation points
 
-for idx_radar = 13000:100:size(radar_x_y_attenu_Tm_v2, 1)
+for idx_radar = 1:size(radar_x_y_attenu_Tm_v2, 1)
     disp(['simulating observation ' num2str(idx_radar) ' / ' num2str(size(radar_x_y_attenu_Tm_v2, 1))])
 
     % store temperature and depth profile 
@@ -67,7 +72,7 @@ for idx_radar = 13000:100:size(radar_x_y_attenu_Tm_v2, 1)
     for idx_md = 1:size(md_filelist, 2)
         disp(['loading model ' num2str(idx_md) ' / ' num2str(size(md_filelist, 1))])
 
-        md = loadmodel(md_filelist(idx_md));
+        md = loadmodel(md_filelist{idx_md});
     
         % for every point in radar data, find its closest point in model
 
