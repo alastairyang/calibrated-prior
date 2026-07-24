@@ -11,7 +11,7 @@ class custom_potential:
         self.verbose = verbose
         self.n = self.attenu_obs_std[self.radar_mask].shape[0]
         self.gaussian_negative_log_likelihood = torch.nn.GaussianNLLLoss(reduction = 'sum')
-        self.uniform_std = 0.5
+        self.uniform_std = 0.1
         print(f"Likelihood Gaussian rank = {self.n}")
 
         #self.gaussian_obs_image = torch.distributions.Normal(torch.tensor(attenu_obs), torch.full(attenu_obs.shape, 0.1))

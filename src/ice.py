@@ -9,20 +9,20 @@ def compute_pmp(H):
     beta=9.8e-8
     return 273.15 - rho_i * g * H * beta 
 
-def enthalpy_to_temperature(Eb, Tpmp, Cp=2093.0, T0=223.15, istorch=True):
+def enthalpy_to_temperature(E, Tpmp, Cp=2093.0, T0=223.15, istorch=True):
     """  
     Compute temperature from enthalpy
 
-    Tb = Tpmp if Eb > Cp*(Tpmp-T0)
-    Tb = (Eb + Cp*T0)/Cp if Eb <= Cp*(Tpmp-T0)
+    T = Tpmp if E > Cp*(Tpmp-T0)
+    T = (E + Cp*T0)/Cp if E <= Cp*(Tpmp-T0)
 
     """
 
     if istorch:
-        Tb = torch.where(Eb > Cp*(Tpmp-T0), Tpmp, (Eb + Cp*T0)/Cp)
+        T = torch.where(E > Cp*(Tpmp-T0), Tpmp, (E + Cp*T0)/Cp)
     else: # numpy
-        Tb = np.where(Eb > Cp*(Tpmp-T0), Tpmp, (Eb + Cp*T0)/Cp)
-    return Tb
+        T = np.where(E > Cp*(Tpmp-T0), Tpmp, (E + Cp*T0)/Cp)
+    return T
 
 def enthalpy_to_water_fraction(Eb, Tpmp, Cp=2093.0, T0=223.15, istorch=True):
     """  
