@@ -77,9 +77,12 @@ class custom_potential:
             # analytical gaussian
             log_likelihood_sample = -0.5 * torch.sum((1/(self.attenu_obs_std[self.radar_mask] ** 2)) * ((self.attenu_obs[self.radar_mask] - z_image[self.radar_mask]) ** 2)) #- np.log(np.sqrt(((2 * np.pi) ** n) * (torch.prod(self.attenu_obs_std ** 2))))
 
+            log_likelihood_sample = log_likelihood_sample / 1000
             #print(f"SE: {torch.sum((self.attenu_obs.detach().clone()[self.radar_mask.flatten()] - z_image[self.radar_mask.flatten()]) ** 2)}, {x[0][10]}, prior log prob: {log_p_prior_sample[0]:.5f}, log likelihood: {log_likelihood_sample:.5f}")
 
-
+            if self.verbose:
+                print(f"SE: {torch.sum((self.attenu_obs.detach().clone()[self.radar_mask.flatten()] - z_image[self.radar_mask.flatten()]) ** 2)}, {x[0][10]}, prior log prob: {log_p_prior_sample[0]:.5f}, log likelihood: {log_likelihood_sample:.5f}")
+        
 
             log_p_posterior_sum += log_p_prior_sample + log_likelihood_sample
                 # log_p_posterior_sum += log_likelihood_sample
@@ -93,8 +96,6 @@ class custom_potential:
         
         np.savez('z_image.npz', z_image = z_image.detach().numpy())
 
-        # if self.verbose:
-        #     print(f"SE: {torch.sum((self.attenu_obs.detach().clone()[self.radar_mask.flatten()] - z_image[self.radar_mask.flatten()]) ** 2)}, {x[0][10]}, prior log prob: {log_p_prior[0]:.5f}, log likelihood: {log_likelihood:.5f}")
         # print(log_p_prior.dtype)
         # print(log_likelihood.dtype)
         #return -(log_p_prior + log_likelihood)
